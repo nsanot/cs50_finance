@@ -1,0 +1,11 @@
+{% extends "layout.html" %}
+
+{% block title %}
+    Quoted
+{% endblock %}
+
+{% block main %}
+    {% for field, value in symbol_info.items() %}
+        <p><b>{{ field.capitalize() }}:</b> {{ value }}</p>
+    {% endfor %}
+{% endblock %}
