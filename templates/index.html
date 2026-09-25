@@ -8,23 +8,27 @@
     <p>Balance: {{ balance }}</p>
     <p>Global balance: {{ global_balance}}</p>
     <hr>
-    <table>
-        <thead>
-            <tr>
-                {% for name in holdings[0] %}
-                    <th>{{name}}</th>
-                {% endfor %}
-            </tr>
-        </thead>
-            {% for position in holdings %}
+    {% if not positions %}
+        <p>You have no open positions.</p>
+    {% else %}
+        <p>Your positions:</p>
+        <table>
+            <thead>
                 <tr>
-                    {% for value in position.values() %}
-                        <td>{{value}}</td>
+                    {% for header in table_headers %}
+                        <th>{{ header }}</th>
                     {% endfor %}
                 </tr>
-            {% endfor %}
-        <tbody>
-
-        </tbody>
-    </table>
+            </thead>
+            <tbody>
+                {% for position in positions %}
+                    <tr>
+                        {% for value in position.values() %}
+                            <td>{{value}}</td>
+                        {% endfor %}
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% endif %}
 {% endblock %}

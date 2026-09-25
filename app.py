@@ -33,6 +33,9 @@ def after_request(response):
 @login_required
 def index():
     """Show portfolio of stocks"""
+    balance = db.execute("SELECT cash FROM users WHERE id = ?", session["user_id"])[0]["cash"]
+    global_balance = balance
+
     positions = db.execute("SELECT stock_symbol, stock_count FROM holdings WHERE user_id = ?", session["user_id"])
 
     for position in positions:
@@ -41,18 +44,19 @@ def index():
         if not response.get("success"):
             return apology(response.get("message"))
 
-        position["stock_price"] = response["stock_info"]["price"]
-        position["total"] = response["stock_info"]["price"] * position["stock_count"]
+        global_balance += response["stock_info"]["price"] * position["stock_count"]
+        position["stock_price"] = usd(response["stock_info"]["price"])
+        position["position_price"] = usd(response["stock_info"]["price"] * position["stock_count"])
 
-    balance = db.execute("SELECT cash FROM users WHERE id = ?", session["user_id"])[0]["cash"]
-    if not positions:
-        global_balance = balance
-    else:
-        global_balance = sum([pos["total"] for pos in positions]) + balance
+    table_headers = ("Symbol", "Count", "Price", "Total")
 
-    # Мб сделать копию списка, где ключи позиций имеют чистые названия, и цены приведены в usd формат
-
-    return render_template("index.html", balance=usd(balance), global_balance=usd(global_balance), positions=positions)
+    return render_template(
+        "index.html",
+        balance=usd(balance),
+        global_balance=usd(global_balance),
+        table_headers=table_headers,
+        positions=positions,
+    )
 
 
 @app.route("/buy", methods=["GET", "POST"])
