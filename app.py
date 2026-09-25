@@ -33,11 +33,14 @@ def after_request(response):
 @login_required
 def index():
     """Show portfolio of stocks"""
+    # Сохраняю баланс пользователя
     balance = db.execute("SELECT cash FROM users WHERE id = ?", session["user_id"])[0]["cash"]
     global_balance = balance
 
+    # Смотрю позиции пользователя
     positions = db.execute("SELECT stock_symbol, stock_count FROM holdings WHERE user_id = ?", session["user_id"])
 
+    # Если есть позиции, формирую таблицу с информацией
     for position in positions:
         response = lookup(position["stock_symbol"])
 
@@ -48,6 +51,7 @@ def index():
         position["stock_price"] = usd(response["stock_info"]["price"])
         position["position_price"] = usd(response["stock_info"]["price"] * position["stock_count"])
 
+    # Определяю чистые заголовки для таблицы
     table_headers = ("Symbol", "Count", "Price", "Total")
 
     return render_template(
