@@ -1,7 +1,8 @@
-import requests
-
-from flask import redirect, render_template, session
+import json
 from functools import wraps
+
+import requests
+from flask import redirect, render_template, session
 
 
 def apology(message, code=400):
@@ -47,28 +48,38 @@ def login_required(f):
 
 def lookup(symbol):
     """Look up quote for symbol."""
-    url = f"https://finance.cs50.io/quote?symbol={symbol.upper()}"
+    symbol = symbol.upper()
+    url = f"https://finance.cs50.io/quote?symbol={symbol}"
+
     try:
-        response = requests.get(url)
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+
+    except requests.exceptions.RequestException as err:
+        response = getattr(err, "response", None)
+        if (response is not None) and (400 <= response.status_code < 500):
+            return {"success": False, "message": "Invalid symbol"}
+
+        print(f'Ошибка requests: {err}')
+        return {"success": False, "message": "Failed to connect to the server."}
+
+    try:
         quote_data = response.json()
+
+        if not quote_data["companyName"] or not quote_data["latestPrice"]:
+            return {"success": False, "message": "The server returned an unexpected response."}
+
         return {
             "success": True,
-            "name": quote_data["companyName"],
-            "price": quote_data["latestPrice"],
-            "symbol": symbol.upper(),
+            "stock_info": {
+                "name": quote_data["companyName"],
+                "price": quote_data["latestPrice"],
+                "symbol": symbol,
             }
-    except requests.RequestException as e:
-        print(f"Request error: {e}")
-        return {
-            "success": False,
-            "message": "Failed to get a response from the server; please try again later",
-            }
-    except (KeyError, ValueError) as e:
-        print(f"Data parsing error: {e}")
-        return {
-            "success": False,
-            "message": "Invalid symbol",
-            }
+        }
+    except (json.decoder.JSONDecodeError, KeyError) as err:
+        print(f"Parsing error: {type(err).__name__}. Response text: {response.text}")
+        return {"success": False, "message": "The server returned an unexpected response."}
 
 
 def usd(value):

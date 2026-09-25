@@ -5,7 +5,7 @@
 {% endblock %}
 
 {% block main %}
-    {% for field, value in symbol_info.items() %}
+    {% for field, value in stock_info.items() %}
         <p><b>{{ field.capitalize() }}:</b> {{ value }}</p>
     {% endfor %}
 {% endblock %}

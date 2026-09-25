@@ -1,5 +1,3 @@
-import os
-
 from cs50 import SQL
 from flask import Flask, flash, redirect, render_template, request, session
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -35,14 +33,90 @@ def after_request(response):
 @login_required
 def index():
     """Show portfolio of stocks"""
-    return apology("TODO")
+    positions = db.execute("SELECT stock_symbol, stock_count FROM holdings WHERE user_id = ?", session["user_id"])
+
+    for position in positions:
+        response = lookup(position["stock_symbol"])
+
+        if not response.get("success"):
+            return apology(response.get("message"))
+
+        position["stock_price"] = response["stock_info"]["price"]
+        position["total"] = response["stock_info"]["price"] * position["stock_count"]
+
+    balance = db.execute("SELECT cash FROM users WHERE id = ?", session["user_id"])[0]["cash"]
+    if not positions:
+        global_balance = balance
+    else:
+        global_balance = sum([pos["total"] for pos in positions]) + balance
+
+    # Мб сделать копию списка, где ключи позиций имеют чистые названия, и цены приведены в usd формат
+
+    return render_template("index.html", balance=usd(balance), global_balance=usd(global_balance), positions=positions)
 
 
 @app.route("/buy", methods=["GET", "POST"])
 @login_required
 def buy():
     """Buy shares of stock"""
-    return apology("TODO")
+    if request.method == "POST":
+        # Сохраняю содержимое формы
+        form = {
+            "symbol": request.form.get("symbol"),
+            "shares": request.form.get("shares", type=int),
+        }
+
+        # Проверяю, что форма не пустая
+        for field, value in form.items():
+            if not value:
+                return apology(f"The '{field}' field cannot be empty.")
+
+        # Запрашиваю информацию об акции
+        response = lookup(form["symbol"])
+        if not response.get("success"):
+            return apology(response.get("message"))
+
+        # Определяю переменные для читаемости
+        user_id = session["user_id"]
+        stock_symbol = response["stock_info"]["symbol"].upper()
+        stock_price = response["stock_info"]["price"]
+        stock_count = form["shares"]
+
+        # Ищу пользователя по ид с сессии, сохраняю его текущий баланс
+        user_cash = db.execute("SELECT * FROM users WHERE id = ?", user_id)[0]["cash"]
+
+        # Проверяю хватает ли баланса для покупки
+        balance_change = stock_price * stock_count
+        if user_cash < balance_change:
+            return apology("Insufficient funds.")
+
+        # Сохраняю транзакцию
+        db.execute(
+            "INSERT INTO transactions (user_id, type, stock_symbol, stock_price, stock_count, balance_change, datetime) VALUES (?, ?, ?, ?, ?, ?, datetime('now'))",
+            user_id,
+            "BUY",
+            stock_symbol,
+            stock_price,
+            stock_count,
+            -balance_change
+        )
+
+        # Списываю баланс
+        db.execute("UPDATE users SET cash = (cash - ?) WHERE id = ?", balance_change, user_id)
+
+        # Обновляю портфель
+        db.execute(
+            "INSERT INTO holdings (user_id, stock_symbol, stock_count) VALUES (?, ?, ?)" \
+            "ON CONFLICT (user_id, stock_symbol) DO UPDATE SET stock_count = stock_count + excluded.stock_count",
+            user_id,
+            stock_symbol,
+            stock_count
+        )
+
+        # Возвращаю пользователя на главную страницу
+        return redirect("/")
+    else:
+        return render_template("buy.html")
 
 
 @app.route("/history")
@@ -109,28 +183,13 @@ def quote():
     if request.method == "POST":
         symbol = request.form.get("symbol")
         if not symbol:
-            return apology("The \"symbol\" field cannot be empty.")
+            return apology("The 'symbol' field cannot be empty.")
 
         response = lookup(symbol)
         if not response.get("success"):
-            msg = response.get("message")
-            if not msg:
-                print("Unsuccessful request, and the server did not return a reason\nResponse:", response)
-                msg = "Unknown error"
-            return apology(msg)
+            return apology(response.get("message"))
 
-        symbol_info = {
-            "name": response.get("name"),
-            "price": response.get("price"),
-            "symbol": response.get("symbol"),
-        }
-
-        for value in symbol_info.values():
-            if not value:
-                print("Successful request, but the information field is empty.\nResponse:", response)
-                return apology("Unknown error")
-
-        return render_template("quoted.html", symbol_info=symbol_info)
+        return render_template("quoted.html", stock_info=response["stock_info"])
 
     else:
         return render_template("quote.html")
@@ -140,40 +199,38 @@ def quote():
 def register():
     """Register user"""
     if request.method == "POST":
-        # Сохраняю информацию с полей
-        fields = {
-            "username": request.form.get("username"),
-            "password": request.form.get("password"),
-            "retype_password": request.form.get("confirmation")
+        # Сохраняю информацию с формы
+        form = {
+            "username": request.form.get("username", ""),
+            "password": request.form.get("password", ""),
+            "retype_password": request.form.get("confirmation", "")
         }
 
-        # Проверяю, что поля не пустые
-        for field, value in fields.items():
+        # Проверяю, что поля формы не пустые
+        for field, value in form.items():
             if not value:
-                return apology(f"The \"{field}\" field cannot be empty")
+                return apology(f"The '{field}' field cannot be empty")
 
         # Проверяю, что пароли совпадают
-        if fields["password"] != fields["retype_password"]:
+        if form["password"] != form["retype_password"]:
             return apology("Passwords do not match")
 
-        # Убеждаюсь, что в базе еще нет пользователя с таким username
-        already_exist = db.execute("SELECT username FROM users WHERE LOWER(username) = ?", fields["username"].lower())
-        if already_exist:
-            print(already_exist)
-            return apology(f"User \"{fields["username"]}\" already registered.")
+        lower_username = form["username"].lower()
 
         # Добавляю пользователя в базу
-        db.execute(
-            "INSERT INTO users (username, hash) VALUES (?, ?)",
-            fields["username"],
-            generate_password_hash(fields["password"]),
-        )
+        try:
+            db.execute(
+                "INSERT INTO users (username, hash) VALUES (?, ?)",
+                form["username"],
+                generate_password_hash(form["password"]),
+            )
+        except ValueError:
+            return apology(f"User '{form["username"]}' already registered.")
 
-        # Нахожу в базе ид только что созданного пользователя
-        new_user_id_row = db.execute("SELECT id FROM users WHERE LOWER(username) = ?", fields["username"].lower())
+        # Нахожу в базе ид только что созданного пользователя, привязываю ид к сессии
+        session["user_id"] = db.execute("SELECT id FROM users WHERE LOWER(username) = ?", lower_username)[0]["id"]
 
-        # Создаю ему сессию и перенаправляю на домашнюю страницу
-        session["user_id"] = new_user_id_row[0]["id"]
+        # Перенаправляю на домашнюю страницу
         return redirect("/")
 
     else:

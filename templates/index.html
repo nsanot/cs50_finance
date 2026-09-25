@@ -1,0 +1,30 @@
+{% extends "layout.html" %}
+
+{% block title %}
+    Homepage
+{% endblock %}
+
+{% block main %}
+    <p>Balance: {{ balance }}</p>
+    <p>Global balance: {{ global_balance}}</p>
+    <hr>
+    <table>
+        <thead>
+            <tr>
+                {% for name in holdings[0] %}
+                    <th>{{name}}</th>
+                {% endfor %}
+            </tr>
+        </thead>
+            {% for position in holdings %}
+                <tr>
+                    {% for value in position.values() %}
+                        <td>{{value}}</td>
+                    {% endfor %}
+                </tr>
+            {% endfor %}
+        <tbody>
+
+        </tbody>
+    </table>
+{% endblock %}
