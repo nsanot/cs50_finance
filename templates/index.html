@@ -5,27 +5,29 @@
 {% endblock %}
 
 {% block main %}
-    <p>Balance: {{ balance }}</p>
-    <p>Global balance: {{ global_balance}}</p>
+    <p><b>Balance:</b> {{ balance }}</p>
+    <p><b>Global balance:</b> {{ global_balance}}</p>
     <hr>
-    {% if not positions %}
-        <p>You have no open positions.</p>
+    {% if not position_table %}
+        <p><b>You have no open positions.</b></p>
     {% else %}
-        <p>Your positions:</p>
-        <table>
+        <p><b>Your positions:</b></p>
+        <table class="table table-bordered">
             <thead>
                 <tr>
-                    {% for header in table_headers %}
-                        <th>{{ header }}</th>
-                    {% endfor %}
+                    <th>Symbol</th>
+                    <th>Count</th>
+                    <th>Price</th>
+                    <th>Total</th>
                 </tr>
             </thead>
             <tbody>
-                {% for position in positions %}
+                {% for position in position_table %}
                     <tr>
-                        {% for value in position.values() %}
-                            <td>{{value}}</td>
-                        {% endfor %}
+                        <td>{{ position.stock_symbol }}</td>
+                        <td>{{ position.stock_count }}</td>
+                        <td>{{ position.stock_price }}</td>
+                        <td>{{ position.total_price }}</td>
                     </tr>
                 {% endfor %}
             </tbody>

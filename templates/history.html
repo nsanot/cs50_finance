@@ -1,0 +1,34 @@
+{% extends "layout.html" %}
+
+{% block title %}
+    History
+{% endblock %}
+
+{% block main %}
+{% if not transaction_table %}
+<p>You have not performed any transactions.</p>
+{% else %}
+<table class="table table-bordered">
+    <thead>
+        <tr>
+            <th>Type</th>
+            <th>Symbol</th>
+            <th>Price</th>
+            <th>Count</th>
+            <th>Datetime</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for transaction in transaction_table%}
+        <tr>
+            <td>{{ transaction.type }}</td>
+            <td>{{ transaction.stock_symbol }}</td>
+            <td>{{ transaction.stock_price }}</td>
+            <td>{{ transaction.stock_count }}</td>
+            <td>{{ transaction.datetime }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+{% endblock %}

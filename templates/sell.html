@@ -1,0 +1,24 @@
+{% extends "layout.html" %}
+
+{% block title %}
+    Sell
+{% endblock %}
+
+{% block main %}
+<form action="/sell" method="post">
+    <div class="mb-3">
+        <label for="symbol" class="form-label">Select a symbol:</label>
+        <select name="symbol" id="symbol" required class="form-select mx-auto w-auto">
+            <option value="" disabled selected>Make a choice</option>
+            {% for symbol in own_symbols %}
+                <option value="{{ symbol }}">{{ symbol }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="mb-3">
+        <label for="count" class="form-label">Enter the quantity for sale:</label>
+        <input name="count" id="count" type="number" required min="1" class="form-control mx-auto w-auto">
+    </div>
+    <button type="submit" class="btn btn-primary">Submit</button>
+</form>
+{% endblock %}

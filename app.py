@@ -38,10 +38,10 @@ def index():
     global_balance = balance
 
     # Смотрю позиции пользователя
-    positions = db.execute("SELECT stock_symbol, stock_count FROM holdings WHERE user_id = ?", session["user_id"])
+    position_table = db.execute("SELECT stock_symbol, stock_count FROM holdings WHERE user_id = ?", session["user_id"])
 
     # Если есть позиции, формирую таблицу с информацией
-    for position in positions:
+    for position in position_table:
         response = lookup(position["stock_symbol"])
 
         if not response.get("success"):
@@ -49,17 +49,13 @@ def index():
 
         global_balance += response["stock_info"]["price"] * position["stock_count"]
         position["stock_price"] = usd(response["stock_info"]["price"])
-        position["position_price"] = usd(response["stock_info"]["price"] * position["stock_count"])
-
-    # Определяю чистые заголовки для таблицы
-    table_headers = ("Symbol", "Count", "Price", "Total")
+        position["total_price"] = usd(response["stock_info"]["price"] * position["stock_count"])
 
     return render_template(
         "index.html",
         balance=usd(balance),
         global_balance=usd(global_balance),
-        table_headers=table_headers,
-        positions=positions,
+        position_table=position_table,
     )
 
 
@@ -131,7 +127,13 @@ def buy():
 @login_required
 def history():
     """Show history of transactions"""
-    return apology("TODO")
+    transaction_table = db.execute("SELECT type, stock_symbol, stock_price, stock_count, datetime FROM transactions WHERE user_id = ?", session["user_id"])
+
+    if transaction_table:
+        for transaction in transaction_table:
+            transaction["stock_price"] = usd(transaction["stock_price"])
+
+    return render_template("history.html", transaction_table=transaction_table)
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -190,12 +192,14 @@ def quote():
     """Get stock quote."""
     if request.method == "POST":
         symbol = request.form.get("symbol")
-        if not symbol:
+        if not request.form.get("symbol"):
             return apology("The 'symbol' field cannot be empty.")
 
         response = lookup(symbol)
         if not response.get("success"):
             return apology(response.get("message"))
+
+        response["stock_info"]["price"] = usd(response["stock_info"]["price"])
 
         return render_template("quoted.html", stock_info=response["stock_info"])
 
@@ -223,19 +227,20 @@ def register():
         if form["password"] != form["retype_password"]:
             return apology("Passwords do not match")
 
+        # Проверяю, что username свободен
         lower_username = form["username"].lower()
-
-        # Добавляю пользователя в базу
-        try:
-            db.execute(
-                "INSERT INTO users (username, hash) VALUES (?, ?)",
-                form["username"],
-                generate_password_hash(form["password"]),
-            )
-        except ValueError:
+        already_exists = db.execute("SELECT id FROM users WHERE LOWER(username) = ?", lower_username)
+        if already_exists:
             return apology(f"User '{form["username"]}' already registered.")
 
-        # Нахожу в базе ид только что созданного пользователя, привязываю ид к сессии
+        # Создаю пользователя
+        db.execute(
+            "INSERT INTO users (username, hash) VALUES (?, ?)",
+            form["username"],
+            generate_password_hash(form["password"]),
+        )
+
+        # Нахожу в базе ид только что созданного пользователя, привязываю его ид к его сессии
         session["user_id"] = db.execute("SELECT id FROM users WHERE LOWER(username) = ?", lower_username)[0]["id"]
 
         # Перенаправляю на домашнюю страницу
@@ -249,4 +254,60 @@ def register():
 @login_required
 def sell():
     """Sell shares of stock"""
-    return apology("TODO")
+    position_table = db.execute("SELECT stock_symbol, stock_count FROM holdings WHERE user_id = ?", session["user_id"])
+    portfolio = {pos["stock_symbol"]: pos["stock_count"] for pos in position_table}
+
+    if request.method == "POST":
+        # Получаю значения формы
+        stock_symbol = request.form.get("symbol", "").upper()
+        sell_amount = request.form.get("count", type=int)
+
+        # Проверяю, что пользователь холдит акцию, которую хочет продать
+        if stock_symbol not in portfolio:
+            return apology(f"You do not own shares with the symbol '{stock_symbol}'")
+
+        hold_amount = portfolio[stock_symbol]
+
+        # Обрабатываю кол-во к продаже
+        if not sell_amount or sell_amount < 1:
+            return apology("Fill in the 'count' field with a positive integer greater than 0")
+        elif sell_amount > hold_amount:
+            return apology(f"You cannot sell more than you have. You have: {hold_amount}")
+
+        # Запрашиваю инфу по акции
+        response = lookup(stock_symbol)
+        if not response.get("success"):
+            return apology(response.get("message"))
+
+        user_id = session["user_id"]
+        stock_price = response["stock_info"]["price"]
+        balance_change = stock_price * sell_amount
+
+        # Обрабатываю продажу
+        db.execute(
+            "INSERT INTO transactions (user_id, type, stock_symbol, stock_price, stock_count, balance_change, datetime) VALUES (?, ?, ?, ?, ?, ?, datetime('now'))",
+            user_id,
+            "SELL",
+            stock_symbol,
+            stock_price,
+            sell_amount,
+            +balance_change
+        )
+
+        db.execute("UPDATE users SET cash = (cash + ?) WHERE id = ?", balance_change, user_id)
+
+        if sell_amount == hold_amount:
+            db.execute("DELETE FROM holdings WHERE stock_symbol = ? AND user_id = ?", stock_symbol, user_id)
+        else:
+            db.execute(
+                "UPDATE holdings SET stock_count = (stock_count - ?) WHERE user_id = ? AND stock_symbol = ?",
+                sell_amount,
+                user_id,
+                stock_symbol
+            )
+
+        # Возвращаю пользователя на главную странциу
+        return redirect("/")
+
+    else:
+        return render_template("sell.html", own_symbols=portfolio.keys())
