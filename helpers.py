@@ -66,7 +66,7 @@ def lookup(symbol):
     try:
         quote_data = response.json()
 
-        if not quote_data["companyName"] or not quote_data["latestPrice"]:
+        if not quote_data["companyName"] or quote_data.get("latestPrice") is None:
             return {"success": False, "message": "The server returned an unexpected response."}
 
         return {

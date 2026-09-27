@@ -5,32 +5,26 @@
 {% endblock %}
 
 {% block main %}
-    <p><b>Balance:</b> {{ balance }}</p>
-    <p><b>Global balance:</b> {{ global_balance}}</p>
+    <p><b>Balance: </b><span id="balance">Loading...</span></p>
+    <p><b>Global balance: </b><span id="global_balance">Loading...</span></p>
     <hr>
-    {% if not position_table %}
-        <p><b>You have no open positions.</b></p>
-    {% else %}
-        <p><b>Your positions:</b></p>
-        <table class="table table-bordered">
-            <thead>
-                <tr>
-                    <th>Symbol</th>
-                    <th>Count</th>
-                    <th>Price</th>
-                    <th>Total</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for position in position_table %}
-                    <tr>
-                        <td>{{ position.stock_symbol }}</td>
-                        <td>{{ position.stock_count }}</td>
-                        <td>{{ position.stock_price }}</td>
-                        <td>{{ position.total_price }}</td>
-                    </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    {% endif %}
+    <table class="table table-bordered">
+        <thead>
+            <tr>
+                <th>Symbol</th>
+                <th>Count</th>
+                <th>Price</th>
+                <th>Total</th>
+            </tr>
+        </thead>
+        <tbody id="positions">
+            <tr>
+                <td id="positions_plug" colspan="4" style="text-align: center">Loading...</td>
+            </tr>
+        </tbody>
+    </table>
+{% endblock %}
+
+{% block body %}
+    <script src="static/render_portfolio.js"></script>
 {% endblock %}

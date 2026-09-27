@@ -1,5 +1,5 @@
 from cs50 import SQL
-from flask import Flask, flash, redirect, render_template, request, session
+from flask import Flask, flash, jsonify, redirect, render_template, request, session
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from flask_session import Session
@@ -33,30 +33,32 @@ def after_request(response):
 @login_required
 def index():
     """Show portfolio of stocks"""
-    # Сохраняю баланс пользователя
-    balance = db.execute("SELECT cash FROM users WHERE id = ?", session["user_id"])[0]["cash"]
-    global_balance = balance
+    return render_template("index.html")
 
-    # Смотрю позиции пользователя
-    position_table = db.execute("SELECT stock_symbol, stock_count FROM holdings WHERE user_id = ?", session["user_id"])
+@app.route("/api/portfolio")
+@login_required
+def portfolio_api():
+    portfolio_info = {
+        "balance": db.execute("SELECT cash FROM users WHERE id = ?", session["user_id"])[0]["cash"],
+        "positions": db.execute("SELECT stock_symbol, stock_count FROM holdings WHERE user_id = ?", session["user_id"])
+    }
+    portfolio_info["global_balance"] = portfolio_info["balance"]
 
     # Если есть позиции, формирую таблицу с информацией
-    for position in position_table:
+    for position in portfolio_info["positions"]:
         response = lookup(position["stock_symbol"])
 
         if not response.get("success"):
             return apology(response.get("message"))
 
-        global_balance += response["stock_info"]["price"] * position["stock_count"]
+        portfolio_info["global_balance"] += response["stock_info"]["price"] * position["stock_count"]
         position["stock_price"] = usd(response["stock_info"]["price"])
         position["total_price"] = usd(response["stock_info"]["price"] * position["stock_count"])
 
-    return render_template(
-        "index.html",
-        balance=usd(balance),
-        global_balance=usd(global_balance),
-        position_table=position_table,
-    )
+    portfolio_info["balance"] = usd(portfolio_info["balance"])
+    portfolio_info["global_balance"] = usd(portfolio_info["global_balance"])
+
+    return jsonify(portfolio_info)
 
 
 @app.route("/buy", methods=["GET", "POST"])
@@ -233,15 +235,12 @@ def register():
         if already_exists:
             return apology(f"User '{form["username"]}' already registered.")
 
-        # Создаю пользователя
-        db.execute(
+        # Создаю пользователя и сохраняю ид в его сессию
+        session["user_id"] = db.execute(
             "INSERT INTO users (username, hash) VALUES (?, ?)",
             form["username"],
             generate_password_hash(form["password"]),
         )
-
-        # Нахожу в базе ид только что созданного пользователя, привязываю его ид к его сессии
-        session["user_id"] = db.execute("SELECT id FROM users WHERE LOWER(username) = ?", lower_username)[0]["id"]
 
         # Перенаправляю на домашнюю страницу
         return redirect("/")
